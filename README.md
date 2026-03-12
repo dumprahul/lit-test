@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Guardian recovery (Lit + contract)
 
-## Getting Started
+Encrypt a password with [Lit Protocol](https://developer.litprotocol.com/sdk/getting-started/lit-client); the key is only releasable when a smart contract reports that 2/3 guardians have approved recovery for the owner.
 
-First, run the development server:
+## Workflow
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. **Owner** sets 3 guardian addresses (once) and encrypts their password with Lit. Encrypted payload is stored by you (DB/IPFS later).
+2. **Forgot password:** Owner requests recovery on-chain. Any 2 of 3 guardians call `approveRecovery(owner)`.
+3. When `recoveryApproved(owner)` is `true`, Lit’s access control allows decryption. Owner connects the same wallet and clicks “Recover password” to decrypt.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Deploy the contract**  
+   Use the Solidity in `contracts/GuardianRecovery.sol`. Deploy to your chain (e.g. Ethereum, Sepolia).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+2. **Env**  
+   Copy `.env.local.example` to `.env.local` and set:
+   - `NEXT_PUBLIC_RECOVERY_CONTRACT_ADDRESS` – deployed `GuardianRecovery` address  
+   - `NEXT_PUBLIC_CHAIN` – e.g. `ethereum` or `sepolia` (for contract + Lit ACC)
 
-## Learn More
+3. **Install and run**
+   ```bash
+   npm install
+   npm run dev
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+## Access control in Lit
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Decryption is gated by an **EVM contract condition**: Lit calls `recoveryApproved(address)` on your contract with the requestor’s address (`:userAddress`). Decryption is allowed only when that returns `true` (i.e. 2/3 guardians have approved). Use the same contract address in `getRecoveryAccessControlConditions()` in `lib/lit.ts` (it reads `NEXT_PUBLIC_RECOVERY_CONTRACT_ADDRESS`).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Contract summary
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **setGuardians(g1, g2, g3)** – Call once per owner to set 3 guardians.
+- **requestRecovery()** – Owner requests recovery.
+- **approveRecovery(owner)** – Guardian approves for that owner.
+- **recoveryApproved(owner)** – View: `true` when recovery was requested and ≥2 guardians have approved. Lit ACC uses this.
